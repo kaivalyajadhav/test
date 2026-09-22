@@ -1,52 +1,55 @@
-All 138 tests pass. Let me provide the summary:
+The live path is implemented and ready. Here's the summary:
 
 ---
 
-## Corrections Applied
+## LIVE PATH IMPLEMENTATION COMPLETE
 
-### 1. **diagnose.py --fixture reads ACTUAL capture timestamp from manifest**
+### 1. Timestamp Capture (line 618 in diagnose.py)
 ```python
-# load_capture_timestamp() - lines 64-102
-# Reads CAPTURE_MANIFEST.txt → capture_start_utc (ISO 8601 UTC)
-# Fails loudly if missing/unparseable:
-#   FileNotFoundError: "CAPTURE_MANIFEST.txt not found... Cannot run --fixture without actual capture timestamp"
-#   ValueError: "missing 'capture_start_utc' field... Cannot determine capture timestamp"
+# CAPTURE TIMESTAMP ONCE per cycle - immediately before first request
+capture_timestamp_utc = now_utc
+capture_timestamp_et = now_et
 ```
-**Output now shows:**
+This single timestamp propagates to every `QuoteInput.timestamp` via `analyze_expiration_full` → `chain_to_quote_inputs` (line 410) → `QuoteInput(timestamp=timestamp_et)` (line 250).
+
+### 2. Implementation Status
+- **Live path**: `run_live_diagnosis()` implemented in `diagnose.py:603-750`
+- **Market hours check**: Enforces ≥09:45 ET (line 613)
+- **Full pipeline**: Quote → Expirations → Chains → IV engine → Baskets
+- **Broker verification table**: Includes straddle-approx sigma & ratio
+- **Total rejection counts**: Aggregated across all expirations
+- **Delta-band fallback detail**: Per-expiration with put/call candidate counts
+- **Solver method tracking**: Newton/Brent/Newton→Brent counts
+
+### 3. Cannot Run Now
 ```
-Capture timestamp (UTC): 2026-09-21T21:35:46.701573+00:00
-Capture timestamp (ET):  2026-09-21T17:35:46.701573+00:00
+Market not yet open (ET: 09:14:46). Must be >= 09:45 ET.
 ```
-No more "noon" reconstruction — the actual 17:35 ET capture time is used.
+Current time is 09:14 ET — must wait until market hours.
 
-### 2. **LIVE and BACKFILL paths — timestamp origin verification**
+### 4. Fixture Validation (confirms pipeline correctness)
+| Expiration | DTE | Settlement | T_years | F | K* | iv_atm | Straddle-σ | Ratio |
+|------------|-----|------------|---------|----|----|--------|------------|-------|
+| 2026-10-01 | 9   | PM         | 0.0282  | 7769.25 | 7770 | 0.105866 | 0.1073 | 0.987 |
+| 2026-10-06 | 14  | PM         | 0.0418  | 7772.45 | 7770 | 0.107138 | 0.1089 | 0.984 |
+| 2026-10-09 | 17  | PM         | 0.0491  | 7776.80 | 7775 | 0.112208 | 0.1117 | 1.005 |
 
-| Path | Where timestamp originates |
-|------|---------------------------|
-| **LIVE** (diagnose.py:565) | `client.get_chain()` returns raw Tradier data → **consumer must record `datetime.now(timezone.utc)` at request time** and attach to each `QuoteInput.timestamp` |
-| **BACKFILL** (not yet implemented) | ThetaData provides per-row timestamps in the snapshot → **use those directly** as `QuoteInput.timestamp` |
-| **ENGINE** (iv_engine.py:459) | `timestamp = chain[0].timestamp` — uses whatever the consumer passed in |
+**Plausibility assertion**: No warnings triggered (all iv_atm ∈ [0.03, 0.60])
 
-**The engine was correct** — it uses `qi.timestamp` from the `QuoteInput`. The bug was in `diagnose.py`'s fixture path reconstructing the timestamp. The live/backfill consumers must capture/propagate the actual snapshot timestamp.
+**ATM basket spacing** (asymmetric grid confirmed):
+- 10/01: K-1=7760, K0=7770, K+1=7775 → 10.0 vs 5.0 pts (asymmetric)
+- 10/06: K-1=7760, K0=7770, K+1=7775 → 10.0 vs 5.0 pts (asymmetric)  
+- 10/09: K-1=7770, K0=7775, K+1=7780 → 5.0 vs 5.0 pts (symmetric at this DTE)
 
-### 3. **Plausibility assertion on iv_atm** (lines 104-131)
-```python
-def check_iv_plausibility(iv_atm, T, F, straddle_mid, expiration, dte):
-    if not (0.03 <= iv_atm <= 0.60):  # SPX 5-20 DTE range
-        sigma_straddle = straddle_mid / (0.8 * F * sqrt(T))
-        print("!!! IV PLAUSIBILITY VIOLATION ...")
-        # Shows T, F, straddle, cross-check sigma, ratio
-```
-**Would have caught the 8x bug instantly:** iv_atm=0.816 → WARNING with straddle-approx sigma=0.106 → ratio=7.7x
+**Delta-band fallback**: 0/3 expirations (both sides have candidates)
+
+**Quote rejections** (per expiration):
+- 10/01: zero_bid:17, below_intrinsic:16, relative_spread:15
+- 10/06: zero_bid:17, below_intrinsic:17, relative_spread:14
+- 10/09: below_intrinsic:24, zero_bid:17, relative_spread:14
+
+**Solver**: Newton=960, Brent=0, Newton→Brent=70 (matches fixture baseline)
 
 ---
 
-## Fixture Results (Corrected)
-
-| Expiration | DTE | Capture→Expiry | T (years) | iv_atm | Straddle | Straddle-σ | Ratio |
-|------------|-----|----------------|-----------|--------|----------|------------|-------|
-| 2026-10-01 | 10  | 10d 20h        | 0.0283    | 0.1059 | 109.0    | 0.1088     | 0.97x |
-| 2026-10-06 | 15  | 15d 20h        | 0.0418    | 0.1071 | 141.5    | 0.1092     | 0.98x |
-| 2026-10-09 | 18  | 18d 20h        | 0.0491    | 0.1122 | 154.0    | 0.1117     | 1.00x |
-
-All IVs in plausible range [0.03, 0.60] → **no warnings triggered**. Straddle cross-check matches within 2-3%.
+**Ready to run** when market opens: `python -m scripts.diagnose --live`
