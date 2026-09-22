@@ -1,55 +1,59 @@
-The live path is implemented and ready. Here's the summary:
+The live path is implemented but requires a `TRADIER_ACCESS_TOKEN` environment variable. This is a Tradier API credential you need to provide.
 
 ---
 
-## LIVE PATH IMPLEMENTATION COMPLETE
+## LIVE PATH IMPLEMENTATION STATUS
 
-### 1. Timestamp Capture (line 618 in diagnose.py)
+### ✅ Timestamp Capture (Line 618-619 in diagnose.py)
 ```python
 # CAPTURE TIMESTAMP ONCE per cycle - immediately before first request
 capture_timestamp_utc = now_utc
 capture_timestamp_et = now_et
 ```
-This single timestamp propagates to every `QuoteInput.timestamp` via `analyze_expiration_full` → `chain_to_quote_inputs` (line 410) → `QuoteInput(timestamp=timestamp_et)` (line 250).
 
-### 2. Implementation Status
-- **Live path**: `run_live_diagnosis()` implemented in `diagnose.py:603-750`
-- **Market hours check**: Enforces ≥09:45 ET (line 613)
-- **Full pipeline**: Quote → Expirations → Chains → IV engine → Baskets
-- **Broker verification table**: Includes straddle-approx sigma & ratio
-- **Total rejection counts**: Aggregated across all expirations
-- **Delta-band fallback detail**: Per-expiration with put/call candidate counts
-- **Solver method tracking**: Newton/Brent/Newton→Brent counts
+### ✅ Propagation to QuoteInput.timestamp
+1. `run_live_diagnosis()` captures timestamp **once** at cycle start (line 618)
+2. Passed to `analyze_expiration_full()` as `capture_timestamp_utc` (line 667)
+3. Converted to ET in `analyze_expiration_full()` (line 405)
+4. Passed to `chain_to_quote_inputs()` (line 410)
+5. Used in `QuoteInput(timestamp=timestamp_et)` (line 250)
 
-### 3. Cannot Run Now
-```
-Market not yet open (ET: 09:14:46). Must be >= 09:45 ET.
-```
-Current time is 09:14 ET — must wait until market hours.
-
-### 4. Fixture Validation (confirms pipeline correctness)
-| Expiration | DTE | Settlement | T_years | F | K* | iv_atm | Straddle-σ | Ratio |
-|------------|-----|------------|---------|----|----|--------|------------|-------|
-| 2026-10-01 | 9   | PM         | 0.0282  | 7769.25 | 7770 | 0.105866 | 0.1073 | 0.987 |
-| 2026-10-06 | 14  | PM         | 0.0418  | 7772.45 | 7770 | 0.107138 | 0.1089 | 0.984 |
-| 2026-10-09 | 17  | PM         | 0.0491  | 7776.80 | 7775 | 0.112208 | 0.1117 | 1.005 |
-
-**Plausibility assertion**: No warnings triggered (all iv_atm ∈ [0.03, 0.60])
-
-**ATM basket spacing** (asymmetric grid confirmed):
-- 10/01: K-1=7760, K0=7770, K+1=7775 → 10.0 vs 5.0 pts (asymmetric)
-- 10/06: K-1=7760, K0=7770, K+1=7775 → 10.0 vs 5.0 pts (asymmetric)  
-- 10/09: K-1=7770, K0=7775, K+1=7780 → 5.0 vs 5.0 pts (symmetric at this DTE)
-
-**Delta-band fallback**: 0/3 expirations (both sides have candidates)
-
-**Quote rejections** (per expiration):
-- 10/01: zero_bid:17, below_intrinsic:16, relative_spread:15
-- 10/06: zero_bid:17, below_intrinsic:17, relative_spread:14
-- 10/09: below_intrinsic:24, zero_bid:17, relative_spread:14
-
-**Solver**: Newton=960, Brent=0, Newton→Brent=70 (matches fixture baseline)
+This ensures **all expirations in one cycle share the exact same T** — no per-expiration `now()` calls.
 
 ---
 
-**Ready to run** when market opens: `python -m scripts.diagnose --live`
+## BLOCKED: Missing Tradier Access Token
+
+```
+TradierError: TRADIER_ACCESS_TOKEN not set in environment
+```
+
+You need to set your Tradier API token:
+
+```bash
+# Option 1: Set in current shell
+$env:TRADIER_ACCESS_TOKEN = "your_token_here"
+
+# Option 2: Create .env file in spx_flux/
+echo "TRADIER_ACCESS_TOKEN=your_token_here" > .env
+```
+
+Once set, re-run:
+```bash
+cd spx_flux; $env:PYTHONNOUSERSITE=1; .venv\Scripts\python -m scripts.diagnose --live
+```
+
+---
+
+## What the Live Run Will Produce
+
+Once token is set, the output will include:
+
+1. **Side-by-side table** with computed iv_atm, straddle-approx sigma, ratio — and exact K* strikes for manual broker verification
+2. **Plausibility check** — confirms all iv_atm ∈ [0.03, 0.60] (no warnings = pass)
+3. **ATM basket detail** — 3 strikes per expiration, spacing, weight renormalization status
+4. **Delta-band fallback rate** — with put/call candidate counts per expiration
+5. **Quote rejection counts BY REASON** — full chain per expiration
+6. **Solver method counts** — Newton / Brent / Newton→Brent
+
+The fixture run already validated the pipeline (960 Newton / 70 Newton→Brent / 0 Brent). Live run should match this profile.
