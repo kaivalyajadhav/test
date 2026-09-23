@@ -1,31 +1,30 @@
+Done.
 
-
-### Built `core/sizing.py` — 13 pure functions per AGENTS.md §5
+### Built `core/integrity.py` — Combo-fill integrity per AGENTS.md §3.9
 
 | Function | Purpose |
 |----------|---------|
-| `equity_required(n, cfg)` | `n × target_flies × reserve / bp_util` |
-| `flies_by_bp(equity, contracts, bp_in_use, cfg)` | Available flies from BP budget |
-| `weekly_contract_update(current, weekly_pnl, equity, cfg)` | +1 win, -1 loss, 0 flat, floor 1, **BP constraint** |
-| `strategy_cap(now)` | 2 pre-14:00, 10 post-14:00 |
-| `effective_fly_cap(now, equity, contracts, bp_in_use, cfg)` | `min(strategy_cap, flies_by_bp, 10)` |
-| `pdt_blocked(equity, cfg)` | Threshold 25,000 |
-| `bp_blocked_add_today(days, cfg)` | >2 days forces `contracts -= 1` next week |
-| `next_week_contracts(current, weekly_pnl, equity, bp_days, cfg)` | Weekly update + BP-blocked forced reduction |
-| `apply_sizing_mode(mode, ...)` | Dispatch: `fixed_1`, `weekly_scaling`, `equity_banded`, `unconstrained` |
-| `reserve_at_entry(contracts, wing_width, credit, cfg)` | `(wing - credit) × 100 × contracts` |
-| `release_on_exit(reserve)` | Returns reserve amount |
+| `verify_fill(order, fill_report)` | Checks all 4 legs: present, 1:1:1:1 ratio, correct sides, correct strikes/rights |
+| `enforce_fill_integrity(order, fill_report)` | Main entry; **raises `FILL_INTEGRITY_BREACH` on ANY mismatch** — never silent |
+| `remediate(breach, adapter)` | Tries market completion → if fails, flattens → if both fail, **raises `RuntimeError`** (never returns unbalanced state) |
+| `ComboOrder` / `FillReport` | Validated dataclasses (4 legs, 1:1:1:1, correct sides per role, unique roles) |
+| `assert_integrity_checking_enabled()` | Startup assertion: **no config can disable integrity** |
 
-### All 133 tests pass (42 new + 46 rules + 19 loader + 26 fly)
+### All 152 tests pass (19 new + 133 existing)
 
 **AGENTS.md §8 mandatory cases verified:**
-- ✅ Win +1, loss -1, floor 1
-- ✅ Step-up to 2 blocked below $50k at 5-fly target
-- ✅ 25k/1 contract → 5 flies; 25k/2 contracts → 2 flies
-- ✅ Drop releases reserve → capacity increases
-- ✅ BP_BLOCKED_ADD 3 days forces `contracts -= 1` next week
-- ✅ Equity $25k → $50k raises cap automatically
-- ✅ PDT blocked at 24,999; not at 25,000
-- ✅ **Below $50k: `fixed_1` == `weekly_scaling`** (26-week simulation identical)
+- ✅ Clean 4-of-4 fill passes
+- ✅ 3-of-4 fill raises `FILL_INTEGRITY_BREACH`
+- ✅ 4-leg wrong ratios raises `FILL_INTEGRITY_BREACH`
+- ✅ After remediation fails, no unbalanced position persists
+- ✅ **No config key can disable integrity checking**
+- ✅ ComboOrder validation rejects wrong leg count, duplicate roles, wrong sides, wrong ratios
 
-All functions are pure: no I/O, no `datetime.now()`, no globals, time always explicit parameter.
+### Core layer complete
+| Module | Functions | Tests |
+|--------|-----------|-------|
+| `core/rules.py` | 8 pure rules | 46 |
+| `core/sizing.py` | 13 pure sizing | 42 |
+| `core/integrity.py` | 3 integrity + remediation | 19 |
+
+**All 152 tests pass. All functions pure: no I/O, no `datetime.now()`, no globals, time always explicit parameter.**
