@@ -1,4 +1,4 @@
-Done. Committed `4fb4369`.
+
 
 ### Built `core/sizing.py` — 13 pure functions per AGENTS.md §5
 
