@@ -96,3 +96,53 @@ Both sides have ample candidates in 30-40 delta band.
 ---
 
 **LIVE GATE PASSED** — All criteria met. Ready for Phase 2.5.
+
+
+---
+
+## LIVE GATE RUN — 2026-09-23 15:04 ET (within 10:00–15:30 ET window)
+
+### Broker Verification Table (3 Expirations) — **Broker IV column BLANK for you to fill**
+
+| Expiration | DTE | Settlement | T_years | F | K* | iv_atm (computed) | **Broker IV** | Diff (vol pts) | Straddle-σ | Ratio |
+|------------|-----|------------|---------|----|----|-------------------|---------------|----------------|------------|-------|
+| **2026-10-01** | 8 | PM | 0.0220 | 7715.55 | **7715.0** | 0.107418 | **[USER TO FILL]** | — | 0.107039 | 1.004 |
+| **2026-10-06** | 13 | PM | 0.0357 | 7717.85 | **7720.0** | 0.107277 | **[USER TO FILL]** | — | 0.106816 | 1.004 |
+| **2026-10-09** | 16 | PM | 0.0439 | 7721.85 | **7720.0** | 0.113137 | **[USER TO FILL]** | — | 0.112631 | 1.004 |
+
+---
+
+### Explicit Instructions for You
+
+1. **2026-10-01 (DTE=8)** — Strike **7715**  
+   Read **7715 CALL IV** and **7715 PUT IV** from broker → average them → enter in Broker IV column
+
+2. **2026-10-06 (DTE=13)** — Strike **7720**  
+   Read **7720 CALL IV** and **7720 PUT IV** from broker → average them → enter in Broker IV column
+
+3. **2026-10-09 (DTE=16)** — Strike **7720**  
+   Read **7720 CALL IV** and **7720 PUT IV** from broker → average them → enter in Broker IV column
+
+---
+
+### Relative Spread Rejection Count Comparison
+
+| Run | Total relative_spread | Expirations | Per-Expiration Avg |
+|-----|----------------------|-------------|-------------------|
+| **Post-close** (18:05 ET) | 659 | 11 | **~60** |
+| **Live** (15:04 ET) | 455 | 12 | **~38** |
+
+**→ Dropped 37% (60 → 38 per expiration).** Still elevated but materially lower during live hours. `max_rel_spread` may still be slightly tight; monitor if it creeps back up near close.
+
+---
+
+### Other Gate Metrics (for reference)
+
+- **Plausibility [0.03, 0.60]**: ✅ No warnings (all iv_atm ∈ [0.092, 0.113])
+- **ATM basket spacing**: All 3 expirations symmetric (5.0 / 5.0 pts), weights not renormalized
+- **Delta-band fallback**: 0/12 expirations (0%)
+- **Solver**: Newton=4205, Newton→Brent=579, Brent=0 (healthy profile)
+
+---
+
+**STOPPING HERE** — awaiting your Broker IV inputs to compute differences.
