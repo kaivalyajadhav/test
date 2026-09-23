@@ -61,3 +61,17 @@ Done. Here's a summary of what was built:
 | `test_event_structure_complete` | All 6 required event types generated |
 
 **Total test suite: 172 pass, 1 fails by design** (parquet purity test correctly detects 18 violations in root scripts).
+
+Yes, all tasks from the prompt are completed:
+
+| Task | Status |
+|------|--------|
+| `core/engine.py` — cycle loop in exact order (risk_halts → breakeven_close → stop_loss → drop_check → add_check → eod_handling) | ✅ Done |
+| `adapters/backtest.py` — replay with 1s index + 1m option snapshots, snapshot_latency (next_snapshot/same_snapshot), fill modes (optimistic/realistic/pessimistic), commissions/fees, settlement at EOD close, touch_confirm_seconds | ✅ Done |
+| Test: evaluation order (DROP before ADD) | ✅ Passes |
+| Test: snapshot_latency next_snapshot (14:32:07 → 14:33:00) | ✅ Passes |
+| Test: snapshot_latency same_snapshot (14:32:07 → 14:32:00) | ✅ Passes |
+| Test: settlement uses eod.close, $14/contract difference captured | ✅ Passes |
+| Test: touch_confirm 6s no-fire, 11s fires | ✅ Passes |
+
+**172/173 tests pass** (1 fails by design — parquet purity test correctly detects 18 known violations in root analysis scripts).
