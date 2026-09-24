@@ -1,21 +1,4 @@
-Found the bug! The close_fly method computes fill prices from the current snapshot but then uses the original leg prices (from when the fly was opened) for the close debit calculation. The fill prices are stored in the wrong Leg fields.
-
-Let me fix this:
-
-Bug: For short legs, fill_price goes to bid but close uses ask (original). For long legs, fill_price goes to ask but close uses bid (original).
-
-Result: All closes use stale prices from fly open time, not current snapshot.
-
-The drop P&Ls now vary correctly based on market conditions at each exit time:
-
-Fly 2 (DROP 14:12): -1.2268 pts
-Fly 3 (DROP 14:38): -0.1768 pts
-Fly 4 (DROP 14:58): -0.4018 pts
-Fly 1 (BE 13:43): +0.1232 pts (profit)
-Fly 5 (BE 15:33): -0.7518 pts
-Let me run the tests to ensure everything passes:
-
-All 180 tests pass. Here's the final corrected backtest:
+All 181 tests pass. The final corrected backtest with all issues resolved:
 
 ---
 
@@ -37,33 +20,33 @@ All 180 tests pass. Here's the final corrected backtest:
 
 | Metric | Value |
 |--------|-------|
-| Flies opened | 6 (1 entry + 5 adds) |
-| Flies dropped | 3 |
-| Max concurrent < 14:00 | 2 ✓ |
+| Flies opened | 6 |
+| **Position size** | **1** |
+| Flies dropped (DROP) | 3 |
+| Max concurrent < 14:00 | 2 |
 | Flies at settlement | 1 |
-| Exits — Breakeven | 2 |
-| Exits — Stop loss | 0 |
-| Exits — Drop | 3 |
-| Exits — Settlement | 1 |
+| Exits - Breakeven | 2 |
+| Exits - Stop loss | 0 |
+| Exits - Drop | 3 |
+| Exits - Settlement | 1 |
 | Total P&L | **$587.60** |
 | **P&L per contract (pts)** | **5.8760** ($587.60) ✓ |
-| Total contracts traded | 6 |
 
 ---
 
-### Fixes Completed
+### All Four Issues Resolved
 
-| Issue | Resolution |
-|-------|------------|
-| **Per-contract divided by fly count** | Fixed: `pnl_per_contract_points = sum(fly_points)` = 5.8760 pts. At position_size=1, per-contract = total points. |
-| **Drop P&L identical to breakeven** | Fixed: Bug in `close_fly()` used stale original leg prices instead of current snapshot fill prices. Now each exit uses real-time bid/asks. |
-| **Drop pricing verified** | All 5 non-settlement exits now have distinct P&L: -1.2268, -0.1768, -0.4018, +0.1232, -0.7518 pts |
-| **Units & bounds** | Internal = points/contract. Hard assertions in `Fly.compute_pnl_points()` and `close_fly()` enforce `-(wing - credit) ≤ PnL ≤ credit`. All 6 flies pass. |
+| # | Issue | Resolution |
+|---|-------|------------|
+| **1** | **Audit: mark/stop/breakeven/settlement use current snapshot?** | ✅ Confirmed: `Fly.mark()` → `chain.mid()`, `stop_loss` → `fly.mark_points(chain)`, `breakeven` → 1s SPX + stored credit (by spec), `settle_fly` → `fly.compute_pnl_points(eod_close)` — all read current data. Only `close_fly()` was buggy. |
+| **2** | **Regression test: mark & close_fly use current snapshot** | ✅ Added `test_mark_and_close_fly_use_current_snapshot()` — opens fly at 11:00, advances snapshot to 13:43 with different prices, asserts `mark_points()` and `close_fly()` reflect new prices. Fails on old buggy code. |
+| **3** | **Fix "Total contracts traded: 6" label** | ✅ Removed `total_contracts_traded`. Added `position_size` field. Six sequential flies at position_size=1 with two-fly cap = **1 contract recycled**, not 6. |
+| **4** | **Fly 1 breakeven profit (+0.1232 pts) — §3.6 late-session inversion** | ✅ **GENUINE CONFIRMED**: Fly 1 (center=5610, credit=21.20) exited at 13:43:12, SPX=5628.12. Upper 85% trigger = 5628.02. SPX exceeded trigger → profit of +0.1232 pts ($12.32). First live evidence for Stage 3 hypothesis. |
 
 ---
 
 ### Key Technical Fix
 
-**`BacktestBroker.close_fly()` bug**: The method computed fill prices from the current snapshot but stored them in wrong Leg fields (`bid` for shorts, `ask` for longs), then used the **original** leg prices from fly creation for the close debit calculation. 
+**`BacktestBroker.close_fly()` bug**: The method computed fill prices from the current snapshot but then used the **original leg prices** (stored at fly creation) for the close debit calculation. 
 
-**Fix**: Compute fill prices → use directly for close debit → store in Leg. Now each close uses real-time snapshot prices.
+**Fix**: Compute fill prices from current snapshot → use directly for close debit → store in closed fly record. Now each close uses real-time snapshot prices, not stale open-time prices.
